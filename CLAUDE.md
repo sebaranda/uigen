@@ -4,123 +4,92 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-UIGen is an AI-powered React component generator with live preview. It uses Claude AI (via Anthropic API) to generate React components based on user descriptions, with a live preview system and code editor.
+UIGen is an AI-powered React component generator with live preview. Users describe components in a chat, Claude generates React code via tool calls, and a sandboxed iframe renders the result in real-time.
 
 ## Development Commands
 
 ```bash
-# First-time setup (install dependencies + initialize database)
-npm run setup
-
-# Start development server with Turbopack
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-
-# Run linter
-npm run lint
-
-# Run tests
-npm test
-
-# Reset database (destructive!)
-npm run db:reset
+npm run setup          # First-time: install deps + prisma generate + migrate
+npm run dev            # Dev server with Turbopack
+npm run build          # Production build
+npm run lint           # ESLint
+npm test               # Vitest (watch mode)
+npm test -- path/to/file.test.tsx  # Single test file
+npm run db:reset       # Reset SQLite database (destructive)
 ```
 
-## Testing
-
-This project uses Vitest for testing. Test files are located in `__tests__` directories alongside components:
-- Component tests: `src/components/**/__tests__/*.test.tsx`
-- Library tests: `src/lib/**/__tests__/*.test.ts`
-
-To run a single test file:
+Prisma migrations:
 ```bash
-npm test -- path/to/test-file.test.tsx
+npx prisma migrate dev --name migration_name
+npx prisma generate
 ```
 
 ## Architecture
 
-### Virtual File System
-The core architecture revolves around a **VirtualFileSystem** (`src/lib/file-system.ts`) that maintains React components entirely in memory—no files are written to disk during development. The file system:
-- Uses a Map-based tree structure with FileNode objects
-- Supports standard operations: create, read, update, delete, rename
-- Serializes to JSON for database persistence
-- Integrates with AI tools for component generation
+### Core Flow
+1. User sends message → `src/app/api/chat/route.ts` receives it with current file system state
+2. Vercel AI SDK streams Claude's response with tool calls (`streamText`, up to 40 steps)
+3. Two AI tools modify a `VirtualFileSystem` instance:
+   - `str_replace_editor` (`src/lib/tools/str-replace.ts`): create, view, edit files via string replacement
+   - `file_manager` (`src/lib/tools/file-manager.ts`): rename, delete files/directories
+4. Client renders streamed tool results into the virtual file system and updates preview
 
-### AI Integration Flow
-1. **Chat API** (`src/app/api/chat/route.ts`) receives user messages and file system state
-2. **Vercel AI SDK** streams responses from Claude with tool calling enabled
-3. **AI Tools**:
-   - `str_replace_editor` (`src/lib/tools/str-replace.ts`): Create, view, and edit files using string replacement
-   - `file_manager` (`src/lib/tools/file-manager.ts`): Rename and delete files/directories
-4. **System Prompt** (`src/lib/prompts/generation.tsx`): Instructs AI to create React components with Tailwind CSS, always starting with `/App.jsx` as entry point
-5. **File System Updates**: Tool executions modify the VirtualFileSystem
-6. **Auto-save**: On completion, authenticated users' projects are saved to database
+### Virtual File System
+`src/lib/file-system.ts` — Map-based in-memory tree of `FileNode` objects. No files written to disk. Serializes to JSON for database persistence.
 
 ### Preview System
-The preview (`src/components/preview/PreviewFrame.tsx`) uses an innovative approach:
-- **JSX Transformer** (`src/lib/transform/jsx-transformer.ts`): Converts JSX files to ES modules using Babel Standalone
-- **Import Maps**: Creates browser import maps with blob URLs for each transformed module
-- **Live Rendering**: Sandboxed iframe loads modules via import maps and renders React components
-- Entry point auto-detection: Looks for `/App.jsx`, `/App.tsx`, `/index.jsx`, or `/index.tsx`
+`src/components/preview/PreviewFrame.tsx` renders components in a sandboxed iframe:
+- `src/lib/transform/jsx-transformer.ts` converts JSX to ES modules via Babel Standalone
+- Creates browser import maps with blob URLs for each module
+- Entry point: `/App.jsx` (or `.tsx`, `/index.jsx`, `/index.tsx`)
 
-### Authentication & Persistence
-- **JWT-based auth** (`src/lib/auth.ts`): Session management with jose library
-- **Prisma with SQLite**: User accounts and project storage
-- **Anonymous mode**: Users can use the app without signing up (no persistence)
-- **Anonymous work tracking** (`src/lib/anon-work-tracker.ts`): Tracks unsaved work for anonymous users
+### Routing
+- `/` — Anonymous users get `MainContent` directly; authenticated users redirect to most recent project
+- `/[projectId]` — Authenticated project page (redirects to `/` if not logged in)
+- `/api/chat` — Streaming chat endpoint (120s max duration)
+
+### State Management
+Two React Context providers wrap the app in `MainContent`:
+- `FileSystemProvider` (`src/lib/contexts/file-system-context.tsx`) — wraps VirtualFileSystem
+- `ChatProvider` (`src/lib/contexts/chat-context.tsx`) — manages messages and AI streaming
+
+### Auth & Persistence
+- JWT sessions via `jose` (`src/lib/auth.ts`)
+- Prisma + SQLite (`prisma/schema.prisma`): `User` and `Project` models
+- Prisma client output: `src/generated/prisma` (not default location)
+- Anonymous users can use the app without persistence
+- `src/lib/anon-work-tracker.ts` tracks unsaved anonymous work
 
 ### Mock Provider
-When `ANTHROPIC_API_KEY` is not set, the app uses a **MockLanguageModel** (`src/lib/provider.ts`) that returns static component examples. This enables development and testing without API costs.
-
-### Context Architecture
-React Context providers manage global state:
-- **FileSystemContext** (`src/lib/contexts/file-system-context.tsx`): Wraps VirtualFileSystem for React components
-- **ChatContext** (`src/lib/contexts/chat-context.tsx`): Manages chat messages and AI streaming state
+When `ANTHROPIC_API_KEY` is absent, `MockLanguageModel` in `src/lib/provider.ts` returns static component examples (counter, form, card). Useful for dev/testing without API costs. Mock uses 4 max steps vs 40 for real API.
 
 ## Key Conventions
 
-### Import Paths
-All non-library imports use the `@/` alias pointing to the `src` directory:
-```tsx
-import { VirtualFileSystem } from '@/lib/file-system';
-import { ChatInterface } from '@/components/chat/ChatInterface';
-```
+- All imports use `@/` alias pointing to `src/`
+- UI components from shadcn/ui (new-york style) in `src/components/ui/`, configured via `components.json`
+- Icons: `lucide-react`
+- AI-generated components must use `/App.jsx` as entry point, Tailwind for styling, default exports
+- The generation system prompt is in `src/lib/prompts/generation.tsx`
 
-### Generated Components
-AI-generated components should:
-- Use `/App.jsx` as the main entry point (required)
-- Import other components using `@/` alias
-- Style with Tailwind CSS classes (no inline styles)
-- Export default component from each file
+## Testing
 
-### Database Migrations
-When modifying the Prisma schema:
-```bash
-npx prisma migrate dev --name descriptive_migration_name
-npx prisma generate
-```
+Vitest with jsdom environment and React Testing Library. Tests live in `__tests__` directories next to their source:
+- `src/components/**/__tests__/*.test.tsx`
+- `src/lib/**/__tests__/*.test.ts`
 
 ## Tech Stack
 
-- **Framework**: Next.js 15 with App Router
-- **React**: Version 19
-- **AI**: Anthropic Claude (claude-sonnet-4-0) via Vercel AI SDK
-- **Database**: Prisma with SQLite
-- **Styling**: Tailwind CSS v4
-- **Testing**: Vitest with Testing Library
-- **UI Components**: Radix UI primitives (Dialog, Tabs, Popover, etc.)
-- **Editor**: Monaco Editor (VS Code's editor)
-- **Transformer**: Babel Standalone for JSX→ESM conversion
+- Next.js 15 (App Router) + React 19 + TypeScript
+- Anthropic Claude (claude-sonnet-4-0) via Vercel AI SDK
+- Prisma + SQLite
+- Tailwind CSS v4
+- Monaco Editor
+- Babel Standalone (JSX→ESM)
+- Radix UI primitives
 
 ## Environment Variables
 
-Optional `.env` file:
 ```
-ANTHROPIC_API_KEY=your-api-key-here  # Optional; uses mock provider if absent
-JWT_SECRET=your-jwt-secret           # Defaults to 'development-secret-key'
+ANTHROPIC_API_KEY=...   # Optional; mock provider used if absent
+JWT_SECRET=...          # Defaults to 'development-secret-key'
 ```
