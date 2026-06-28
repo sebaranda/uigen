@@ -55,7 +55,7 @@ Dos providers de React Context envuelven la app en `MainContent`:
 
 ### Auth y persistencia
 - Sesiones JWT via `jose` (`src/lib/auth.ts`)
-- Prisma + SQLite (`prisma/schema.prisma`): modelos `User` y `Project`
+- Prisma + SQLite: modelos `User` y `Project` — **siempre consultar `prisma/schema.prisma` para entender la estructura de datos**
 - Output del cliente Prisma: `src/generated/prisma` (ubicación no estándar)
 - Los usuarios anónimos pueden usar la app sin persistencia
 - `src/lib/anon-work-tracker.ts` rastrea trabajo anónimo no guardado
