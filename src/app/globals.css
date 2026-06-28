@@ -121,10 +121,3 @@
     @apply bg-background text-foreground;
   }
 }
-
-/* Radix ScrollArea viewport div doesn't inherit height — needed for vertical centering of empty states */
-[data-radix-scroll-area-viewport] > div {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-}
