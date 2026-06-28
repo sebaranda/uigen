@@ -1,83 +1,83 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Este archivo provee orientación a Claude Code (claude.ai/code) para trabajar con el código de este repositorio.
 
-## Project Overview
+## Descripción del proyecto
 
-UIGen is an AI-powered React component generator with live preview. Users describe components in a chat, Claude generates React code via tool calls, and a sandboxed iframe renders the result in real-time.
+UIGen es un generador de componentes React con IA y preview en tiempo real. Los usuarios describen componentes en un chat, Claude genera código React mediante tool calls, y un iframe en sandbox renderiza el resultado en tiempo real.
 
-## Development Commands
+## Comandos de desarrollo
 
 ```bash
-npm run setup          # First-time: install deps + prisma generate + migrate
-npm run dev            # Dev server with Turbopack
-npm run build          # Production build
+npm run setup          # Primera vez: instala deps + prisma generate + migrate
+npm run dev            # Servidor de desarrollo con Turbopack
+npm run build          # Build de producción
 npm run lint           # ESLint
-npm test               # Vitest (watch mode)
-npm test -- path/to/file.test.tsx  # Single test file
-npm run db:reset       # Reset SQLite database (destructive)
+npm test               # Vitest (modo watch)
+npm test -- path/to/file.test.tsx  # Archivo de test individual
+npm run db:reset       # Resetea la base de datos SQLite (destructivo)
 ```
 
-Prisma migrations:
+Migraciones de Prisma:
 ```bash
-npx prisma migrate dev --name migration_name
+npx prisma migrate dev --name nombre_migracion
 npx prisma generate
 ```
 
-## Architecture
+## Arquitectura
 
-### Core Flow
-1. User sends message → `src/app/api/chat/route.ts` receives it with current file system state
-2. Vercel AI SDK streams Claude's response with tool calls (`streamText`, up to 40 steps)
-3. Two AI tools modify a `VirtualFileSystem` instance:
-   - `str_replace_editor` (`src/lib/tools/str-replace.ts`): create, view, edit files via string replacement
-   - `file_manager` (`src/lib/tools/file-manager.ts`): rename, delete files/directories
-4. Client renders streamed tool results into the virtual file system and updates preview
+### Flujo principal
+1. El usuario envía un mensaje → `src/app/api/chat/route.ts` lo recibe junto con el estado actual del sistema de archivos
+2. El Vercel AI SDK transmite la respuesta de Claude con tool calls (`streamText`, hasta 40 pasos)
+3. Dos herramientas de IA modifican una instancia de `VirtualFileSystem`:
+   - `str_replace_editor` (`src/lib/tools/str-replace.ts`): crear, ver y editar archivos mediante reemplazo de strings
+   - `file_manager` (`src/lib/tools/file-manager.ts`): renombrar y eliminar archivos/directorios
+4. El cliente renderiza los resultados de las tools al sistema de archivos virtual y actualiza el preview
 
-### Virtual File System
-`src/lib/file-system.ts` — Map-based in-memory tree of `FileNode` objects. No files written to disk. Serializes to JSON for database persistence.
+### Sistema de archivos virtual
+`src/lib/file-system.ts` — Árbol en memoria basado en `Map` de objetos `FileNode`. No se escriben archivos en disco. Se serializa a JSON para persistencia en base de datos.
 
-### Preview System
-`src/components/preview/PreviewFrame.tsx` renders components in a sandboxed iframe:
-- `src/lib/transform/jsx-transformer.ts` converts JSX to ES modules via Babel Standalone
-- Creates browser import maps with blob URLs for each module
-- Entry point: `/App.jsx` (or `.tsx`, `/index.jsx`, `/index.tsx`)
+### Sistema de preview
+`src/components/preview/PreviewFrame.tsx` renderiza los componentes en un iframe en sandbox:
+- `src/lib/transform/jsx-transformer.ts` convierte JSX a módulos ES via Babel Standalone
+- Crea import maps del navegador con blob URLs para cada módulo
+- Punto de entrada: `/App.jsx` (o `.tsx`, `/index.jsx`, `/index.tsx`)
 
-### Routing
-- `/` — Anonymous users get `MainContent` directly; authenticated users redirect to most recent project
-- `/[projectId]` — Authenticated project page (redirects to `/` if not logged in)
-- `/api/chat` — Streaming chat endpoint (120s max duration)
+### Enrutamiento
+- `/` — Usuarios anónimos acceden a `MainContent` directamente; usuarios autenticados son redirigidos al proyecto más reciente
+- `/[projectId]` — Página de proyecto autenticado (redirige a `/` si no está logueado)
+- `/api/chat` — Endpoint de streaming (duración máxima 120s)
 
-### State Management
-Two React Context providers wrap the app in `MainContent`:
-- `FileSystemProvider` (`src/lib/contexts/file-system-context.tsx`) — wraps VirtualFileSystem
-- `ChatProvider` (`src/lib/contexts/chat-context.tsx`) — manages messages and AI streaming
+### Gestión de estado
+Dos providers de React Context envuelven la app en `MainContent`:
+- `FileSystemProvider` (`src/lib/contexts/file-system-context.tsx`) — envuelve VirtualFileSystem
+- `ChatProvider` (`src/lib/contexts/chat-context.tsx`) — gestiona mensajes y streaming de IA
 
-### Auth & Persistence
-- JWT sessions via `jose` (`src/lib/auth.ts`)
-- Prisma + SQLite (`prisma/schema.prisma`): `User` and `Project` models
-- Prisma client output: `src/generated/prisma` (not default location)
-- Anonymous users can use the app without persistence
-- `src/lib/anon-work-tracker.ts` tracks unsaved anonymous work
+### Auth y persistencia
+- Sesiones JWT via `jose` (`src/lib/auth.ts`)
+- Prisma + SQLite (`prisma/schema.prisma`): modelos `User` y `Project`
+- Output del cliente Prisma: `src/generated/prisma` (ubicación no estándar)
+- Los usuarios anónimos pueden usar la app sin persistencia
+- `src/lib/anon-work-tracker.ts` rastrea trabajo anónimo no guardado
 
 ### Mock Provider
-When `ANTHROPIC_API_KEY` is absent, `MockLanguageModel` in `src/lib/provider.ts` returns static component examples (counter, form, card). Useful for dev/testing without API costs. Mock uses 4 max steps vs 40 for real API.
+Cuando `ANTHROPIC_API_KEY` no está configurada, `MockLanguageModel` en `src/lib/provider.ts` devuelve ejemplos de componentes estáticos (contador, formulario, tarjeta). Útil para desarrollo/testing sin costos de API. El mock usa 4 pasos máximo vs 40 de la API real.
 
-## Key Conventions
+## Convenciones clave
 
-- All imports use `@/` alias pointing to `src/`
-- UI components from shadcn/ui (new-york style) in `src/components/ui/`, configured via `components.json`
-- Icons: `lucide-react`
-- AI-generated components must use `/App.jsx` as entry point, Tailwind for styling, default exports
-- The generation system prompt is in `src/lib/prompts/generation.tsx`
+- Todos los imports usan el alias `@/` que apunta a `src/`
+- Componentes UI de shadcn/ui (estilo new-york) en `src/components/ui/`, configurados via `components.json`
+- Íconos: `lucide-react`
+- Los componentes generados por IA deben usar `/App.jsx` como punto de entrada, Tailwind para estilos y exports por defecto
+- El system prompt de generación está en `src/lib/prompts/generation.tsx`
 
 ## Testing
 
-Vitest with jsdom environment and React Testing Library. Tests live in `__tests__` directories next to their source:
+Vitest con entorno jsdom y React Testing Library. Los tests viven en directorios `__tests__` junto a su fuente:
 - `src/components/**/__tests__/*.test.tsx`
 - `src/lib/**/__tests__/*.test.ts`
 
-## Tech Stack
+## Stack tecnológico
 
 - Next.js 15 (App Router) + React 19 + TypeScript
 - Anthropic Claude (claude-sonnet-4-6) via Vercel AI SDK
@@ -85,11 +85,11 @@ Vitest with jsdom environment and React Testing Library. Tests live in `__tests_
 - Tailwind CSS v4
 - Monaco Editor
 - Babel Standalone (JSX→ESM)
-- Radix UI primitives
+- Primitivos de Radix UI
 
-## Environment Variables
+## Variables de entorno
 
 ```
-ANTHROPIC_API_KEY=...   # Optional; mock provider used if absent
-JWT_SECRET=...          # Defaults to 'development-secret-key'
+ANTHROPIC_API_KEY=...   # Opcional; se usa el mock provider si no está presente
+JWT_SECRET=...          # Por defecto: 'development-secret-key'
 ```
