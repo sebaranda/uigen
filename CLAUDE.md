@@ -80,7 +80,7 @@ Vitest with jsdom environment and React Testing Library. Tests live in `__tests_
 ## Tech Stack
 
 - Next.js 15 (App Router) + React 19 + TypeScript
-- Anthropic Claude (claude-sonnet-4-0) via Vercel AI SDK
+- Anthropic Claude (claude-sonnet-4-6) via Vercel AI SDK
 - Prisma + SQLite
 - Tailwind CSS v4
 - Monaco Editor
