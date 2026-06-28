@@ -10,6 +10,11 @@ interface MessageListProps {
   isLoading?: boolean;
 }
 
+const TOOL_LABELS: Record<string, string> = {
+  str_replace_editor: "Editando archivos",
+  file_manager: "Administrando archivos",
+};
+
 export function MessageList({ messages, isLoading }: MessageListProps) {
   if (messages.length === 0) {
     return (
@@ -81,12 +86,12 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
                                 {tool.state === "result" && tool.result ? (
                                   <>
                                     <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                    <span className="text-neutral-700">{tool.toolName}</span>
+                                    <span className="text-neutral-700">{TOOL_LABELS[tool.toolName] ?? tool.toolName}</span>
                                   </>
                                 ) : (
                                   <>
                                     <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
-                                    <span className="text-neutral-700">{tool.toolName}</span>
+                                    <span className="text-neutral-700">{TOOL_LABELS[tool.toolName] ?? tool.toolName}</span>
                                   </>
                                 )}
                               </div>
